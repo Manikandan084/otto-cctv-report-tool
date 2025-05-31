@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OTTO Store Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script> 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<!-- ✨ Added XLSX library -->
+  <style>
+    /* === Your existing CSS (unchanged) === */
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f4f6fa; }
+    .container { display: flex; align-items: center; justify-content: center; flex-direction: column; min-height: 100vh; }
+    .box { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 95vw; min-width: 320px; animation: fadeIn 0.6s ease; }
+    .hidden { display: none; }
+    input[type="text"], input[type="password"], input[type="date"], input[type="time"], input[type="email"] {
+      width: 100%; padding: 10px; margin: 6px 0; border: 1px solid #ccc; border-radius: 10px; font-size: 14px;
+    }
+    input:focus { border-color: #007bff; outline: none; }
+    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+    button:hover { background: #0056b3; }
+    .back-btn { background-color: #6c757d; }
+    .back-btn:hover { background-color: #5a6268; }
+    .region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 20px; margin-top: 20px; }
+    .region-card { background: #ffffff; padding: 20px; border-radius: 12px; text-align: center; cursor: pointer; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.05); animation: slideUp 0.4s ease forwards; }
+    .region-card:hover { background: #e9f0ff; transform: translateY(-3px); }
+    .store-table { margin-top: 20px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+    th, td { padding: 12px; border: 1px solid #ddd; text-align: center; font-size: 14px; }
+    td input, td textarea { width: 100%; box-sizing: border-box; }
+    textarea { width: 100%; height: 60px; resize: vertical; border-radius: 8px; padding: 8px; font-size: 14px; }
+    #searchInput { margin: 10px 0; padding: 10px; border-radius: 10px; border: 1px solid #ccc; width: 100%; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; }
+    .filter-section { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+    .filter-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .filter-row input { flex: 1; min-width: 160px; }
+    input[type="checkbox"].viewed:checked { accent-color: green; }
+    input[type="checkbox"].not-viewed:checked { accent-color: red; }
+    input[type="checkbox"].ultra:checked { accent-color: orange; }
+    input[type="checkbox"].mobile:checked { accent-color: dodgerblue; }
+    .store-table {
+  max-height: 400px; /* or whatever height you need */
+  overflow-y: auto;
+}
+
+.store-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.store-table th, .store-table td {
+  padding: 8px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+
+.store-table thead th {
+  position: sticky;
+  top: 0;
+  background-color: #f9f9f9; /* So headers don't become transparent */
+  z-index: 2;
+}
+
+    
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="box" id="loginBox">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username" />
+    <input type="password" id="password" placeholder="Password" />
+    <button onclick="login()">Login</button>
+  </div>
+  <div class="box hidden" id="postLoginBox">
+    <h2>Welcome!</h2>
+    <button onclick="openCCTV()">📹 CCTV Surveillance</button>
+    <a href="staff_editor.php" id="adminBtn" class="hidden" style="text-decoration: none;">
+  <button>🛠️ Admin Panel</button>
+</a>
+
+  </div>
+
+  <div class="box hidden" id="adminPanelBox">
+    <h2>🛠️ Admin Panel</h2>
+    <h3>Manage Region (From Stores Table)</h3>
+
+<input type="text" id="region_input" placeholder="Enter Region Name">
+<button onclick="addRegion()">Add Region</button>
+<p id="region_response"></p>
+
+<select id="region_select"></select>
+<button onclick="deleteRegion()">Delete Region</button>
+
+    <button onclick="showAddStoreForm()">➕ Add Store</button>
+    <button onclick="showEditStoreForm()">✏️ Edit Store</button>
+    <button onclick="showDeleteStoreForm()">❌ Delete Store</button>
+    <button onclick="showTransferStoreForm()">🔄 Transfer Store</button>
+    <button class="back-btn" onclick=" goBackToPostLogin()">Back</button>
+    <div id="formContainer" class="mt-4"></div>
+  
+  </div>
+  
+
+  <div class="box hidden" id="regionBox">
+    <div class="top-bar">
+      <h2>Select Region</h2>
+      <span id="userDisplay"></span>
+    </div>
+  
+    <div class="region-grid" id="regionGrid"></div>
+  
+    <!-- ✅ Back button with inline CSS at bottom -->
+    <div class="box" id="storebox" style="text-align: center; margin-top: 30px; width: 1150px;">
+      <button onclick="goBackToPostLogin()" 
+        style="background-color: #6c757d; color: white; padding: 12px 24px; font-size: 16px; border: none; border-radius: 16px; cursor: pointer;">
+        ↩️ Back to Dashboard
+      </button>
+    </div>
+  </div>
+  
+
+  <div class="box hidden" id="storeBox">
+    <h2 id="regionTitle">Region</h2>
+    
+    
+
+
+
+
+    <div class="filter-section">
+      <div class="filter-row">
+        <input type="date" id="globalDate" />
+        <input type="text" id="commonLocation" placeholder="Location" />
+      </div>
+      <div class="filter-row">
+        <input type="time" id="commonStartTime" />
+        <input type="time" id="commonEndTime" />
+      </div>
+      <div class="filter-row">
+        <input type="text" id="searchInput" placeholder="🔍 Search store..." onkeyup="searchStore()" />
+      </div>
+    </div>
+
+    <div class="store-table">
+      <table id="storeTable">
+        <thead>
+          <tr>
+            <th>Store</th>
+            <th>Software</th>
+            
+            <th>System No.</th>
+            <th>Viewed</th>
+            <th>Not Viewed</th>
+            <th>UltraViewer</th>
+            <th>Mobile</th>
+            <th>Issues</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:20px;">
+      
+      <button onclick="exportToExcel()">⬇️ Export to Excel</button>
+</div>
+<div id="viewCounts">✅ Viewed: 0 | ❌ Not Viewed: 0</div>
+<div style="margin-top: 20px;">
+  <h3>📅 Load Previous Report</h3>
+  <label for="reportDate">Select Date:</label>
+  <input type="date" id="reportDate" />
+  <button onclick="loadReport()">🔍 Load Report</button>
+</div>
+
+
+
+    <button onclick="submitRegionData()">Submit</button>
+    <p id="countDisplay" style="margin-top: 10px; font-weight: bold; text-align: center;"></p>
+    <button class="back-btn" onclick="goBackToRegion()">Back to Regions</button>
+  </div>
+</div>
+
+<script>
+function addRegion() {
+    var region = document.getElementById("region_input").value;
+    if (region.trim() === "") {
+        alert("Enter region name.");
+        return;
+    }
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "add_region.php", true);
+    xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhr.onload = function () {
+        document.getElementById("region_response").innerText = this.responseText;
+        loadRegions();
+    };
+    xhr.send("region=" + encodeURIComponent(region));
+}
+
+function deleteRegion() {
+    var region = document.getElementById("region_select").value;
+    if (!region) return;
+
+    if (!confirm("Are you sure you want to delete this region and all its stores?")) return;
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "delete_region.php", true);
+    xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhr.onload = function () {
+        alert(this.responseText);
+        loadRegions();
+    };
+    xhr.send("region=" + encodeURIComponent(region));
+}
+
+function loadRegions() {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "get_regions.php", true);
+    xhr.onload = function () {
+        var regions = JSON.parse(this.responseText);
+        var select = document.getElementById("region_select");
+        select.innerHTML = "";
+        regions.forEach(function(region) {
+            var opt = document.createElement("option");
+            opt.value = region;
+            opt.text = region;
+            select.appendChild(opt);
+        });
+    };
+    xhr.send();
+}
+
+window.onload = loadRegions;
+</script>
+
+<script>
+  function showAddStoreForm() {
+    document.getElementById('formContainer').innerHTML = `
+      <h3>Add Store</h3>
+      <form action="add_store.php" method="POST">
+        <input type="text" name="store_name" placeholder="Store Name" required><br>
+        <input type="text" name="region" placeholder="Region" required><br>
+        <input type="text" name="state" placeholder="State" required><br>
+        <button type="submit">Add Store</button>
+      </form>`;
+  }
+  
+  function showEditStoreForm() {
+    document.getElementById('formContainer').innerHTML = `
+      <h3>Edit Store</h3>
+      <form action="edit_store.php" method="POST">
+        <input type="text" name="store_name" placeholder="Store name to Edit" required><br>
+        <input type="text" name="store_name" placeholder="New Store Name"><br>
+        <input type="text" name="region" placeholder="New Region"><br>
+        <input type="text" name="state" placeholder="New State"><br>
+        <button type="submit">Edit Store</button>
+      </form>`;
+  }
+  
+  function showDeleteStoreForm() {
+    document.getElementById('formContainer').innerHTML = `
+      <h3>Delete Store</h3>
+      <form action="delete_store.php" method="POST">
+        <input type="text" name="store_name" placeholder="Store name to Delete" required><br>
+        <button type="submit">Delete Store</button>
+      </form>`;
+  }
+  
+  function showTransferStoreForm() {
+    document.getElementById('formContainer').innerHTML = `
+      <h3>Transfer Store</h3>
+      <form action="transfer_store.php" method="POST">
+        <input type="text" name="store_name" placeholder="store name" required><br>
+        <input type="text" name="new_region" placeholder="New Region" required><br>
+        <button type="submit">Transfer Store</button>
+      </form>`;
+  }
+  </script>
+  
+<script>
+  if (sessionStorage.getItem("role") === "admin") {
+    document.getElementById("adminBtn").classList.remove("hidden");
+  }
+  function openCCTV() {
+    document.getElementById("postLoginBox").classList.add("hidden");
+    document.getElementById("regionBox").classList.remove("hidden");
+    loadRegionGrid(); // already defined
+  }
+  function openAdminPanel() {
+    document.getElementById("postLoginBox").classList.add("hidden");
+    document.getElementById("adminPanelBox").classList.remove("hidden");
+  }
+  function goBackToPostLogin() {
+    document.getElementById("regionBox").classList.add("hidden"); // Correct this
+    document.getElementById("adminPanelBox").classList.add("hidden");
+    document.getElementById("postLoginBox").classList.remove("hidden");
+  }
+  
+  
+  
+  
+  
+
+    let storeData = {}; // ✅ Declare storeData globally
+    let currentRegion = '';
+    
+
+
+
+/* ✨ your existing storeData object here (same) ✨ */ 
+
+function login() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+
+  // Sample role check (ideally from backend)
+  if (username === "admin" && password === "1234") {
+    sessionStorage.setItem("role", "admin");
+  } else if (username === "user" && password === "1234") {
+    sessionStorage.setItem("role", "user");
+  } else {
+    alert("Invalid credentials!");
+    return;
+  }
+
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("postLoginBox").classList.remove("hidden");
+  document.getElementById("userDisplay").innerText = `Logged in as: ${username}`;
+}
+
+async function loadRegionGrid() {
+  console.log("Loading regions...");
+
+  try {
+    // 🔄 Step 1: Dynamically fetch region names from the backend
+    const regionResponse = await fetch("get_regions.php"); // Make sure this returns a list like ["TN-1", "TN-2", "TN-3", ...]
+    const regions = await regionResponse.json();
+
+    const grid = document.getElementById("regionGrid");
+    grid.innerHTML = '';
+
+    for (let region of regions) {
+      console.log("Fetching region:", region);
+
+      try {
+        const response = await fetch(`get_stores.php?region=${encodeURIComponent(region)}`);
+        const data = await response.json();
+
+        storeData[region] = data;
+
+        let count;
+        if (region === "Other States") {
+          count = Object.values(data).reduce((sum, stores) => sum + stores.length, 0);
+        } else {
+          count = data.length;
+        }
+
+        const div = document.createElement("div");
+        div.className = "region-card";
+        div.innerHTML = `${region}<br><small>${count} Stores</small>`;
+        div.onclick = () => loadRegion(region);
+        grid.appendChild(div);
+      } catch (error) {
+        console.error(`Error loading stores for ${region}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching region list:", error);
+  }
+}
+
+
+function fetchRegionData(region) {
+  fetch(`get_stores.php?region=${encodeURIComponent(region)}`)
+    .then(response => {
+      if (!response.ok) throw new Error("Network response was not ok");
+      return response.json();
+    })
+    .then(data => {
+      storeData[region] = data;
+      loadRegion(region); // ✅ Only call when data is ready
+    })
+    .catch(error => {
+      console.error(`Error loading ${region}:`, error);
+      alert("Failed to load stores. Please try again.");
+    });
+}
+
+
+function loadRegion(region) {
+  const data = storeData[region];
+  if (!data) {
+    console.warn(`No data loaded for region: ${region}`);
+    return;
+  }
+
+  currentRegion = region;
+  document.getElementById("regionBox").classList.add("hidden");
+  document.getElementById("storeBox").classList.remove("hidden");
+  const tbody = document.querySelector("#storeTable tbody");
+  tbody.innerHTML = '';
+
+  if (region === 'Other States') {
+    document.getElementById("regionTitle").innerText = "Other States Region - Grouped View";
+    for (let state in data) {
+      const storesInState = data[state];
+      const headerRow = document.createElement("tr");
+      headerRow.innerHTML = `<td colspan="8" style="font-weight:bold; background:#e3e9f7;">${state}</td>`;
+      tbody.appendChild(headerRow);
+      storesInState.forEach(store => tbody.appendChild(createStoreRow(store)));
+    }
+  } else {
+    document.getElementById("regionTitle").innerText = `${region} Region - ${data.length} Stores`;
+    updateRegionCounts(data);
+
+    data.forEach(store => tbody.appendChild(createStoreRow(store)));
+
+  }
+}
+
+
+
+function createStoreRow(store) {
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${store}</td>
+    <td>
+      <select>
+        <option value="">-- Select Software --</option>
+        <option value="Smart PSS">Smart PSS</option>
+        <option value="Smart PSS Lite">Smart PSS Lite</option>
+        <option value="Hilook Vision Client">Hilook Vision Client</option>
+        <option value="IVMS_4200 Lite">IVMS_4200 Lite</option>
+      </select>
+    </td>
+    <td>
+      <select>
+        <option value="">-- System no --</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+      </select>
+        
+
+    </td>
+    <td><input type="checkbox" class="viewed" onchange="toggleCheck(this)"></td>
+    <td><input type="checkbox" class="not-viewed" onchange="toggleCheck(this)"></td>
+    <td><input type="checkbox" class="ultra" onchange="toggleCheck(this)"></td>
+    <td><input type="checkbox" class="mobile" onchange="toggleCheck(this)"></td>
+    <td><textarea></textarea></td>
+  `;
+  return row;
+}
+
+function toggleCheck(currentCheckbox) {
+  const row = currentCheckbox.closest("tr");
+  const checkboxes = row.querySelectorAll("input[type='checkbox']");
+  checkboxes.forEach(cb => {
+    if (cb !== currentCheckbox) cb.checked = false;
+  });
+  updateRegionCounts(); // 👈 Add this
+}
+
+function searchStore() {
+  const input = document.getElementById("searchInput").value.toLowerCase();
+  const rows = document.querySelectorAll("#storeTable tbody tr");
+  rows.forEach(row => {
+    const storeName = row.children[0]?.innerText?.toLowerCase();
+    row.style.display = storeName?.includes(input) ? "" : "none";
+  });
+}
+function updateRegionCounts() {
+  let viewed = 0;
+  let notViewed = 0;
+
+  const rows = document.querySelectorAll("#storeTable tbody tr");
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    if (cells.length < 8) return;
+
+    const viewedCB = cells[3].querySelector("input")?.checked;
+    const ultraCB = cells[5].querySelector("input")?.checked;
+    const mobileCB = cells[6].querySelector("input")?.checked;
+    const notViewedCB = cells[4].querySelector("input")?.checked;
+
+    if (viewedCB || ultraCB || mobileCB) viewed++;
+    else if (notViewedCB) notViewed++;
+  });
+
+  document.getElementById("viewCounts").innerText = `✅ Viewed: ${viewed} | ❌ Not Viewed: ${notViewed}`;
+}
+
+
+function getStatusFromStoreName(storeName) {
+  const rows = document.querySelectorAll("#storeTable tbody tr");
+  for (let row of rows) {
+    if (row.children.length < 8) continue;
+    if (row.children[0].innerText.trim() === storeName) {
+      if (row.children[3].querySelector("input").checked) return "viewed";
+      if (row.children[4].querySelector("input").checked) return "not viewed";
+      if (row.children[5].querySelector("input").checked) return "ultra";
+      if (row.children[6].querySelector("input").checked) return "mobile";
+    }
+  }
+  return "";
+}
+
+
+function submitRegionData() {
+  const date = document.getElementById("globalDate").value;
+  const location = document.getElementById("commonLocation").value;
+  const startTime = document.getElementById("commonStartTime").value;
+  const endTime = document.getElementById("commonEndTime").value;
+  
+  const rows = document.querySelectorAll("#storeTable tbody tr");
+  const stores = [];
+  
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    
+    // Skip if this is a 'state header row' (colspan=8)
+    if (cells.length < 8) return;
+    
+    const storeName = cells[0].innerText.trim();
+    const software = cells[1].querySelector("select")?.value || "";
+    const systemNo = cells[2].querySelector("select")?.value || "";
+    const viewed = cells[3].querySelector("input[type='checkbox']")?.checked ? "viewed" : "";
+    const notViewed = cells[4].querySelector("input[type='checkbox']")?.checked ? "not viewed" : "";
+    const ultra = cells[5].querySelector("input[type='checkbox']")?.checked ? "ultra" : "";
+    const mobile = cells[6].querySelector("input[type='checkbox']")?.checked ? "mobile" : "";
+    const issues = cells[7].querySelector("textarea")?.value || "";
+
+    stores.push({
+      store: storeName,
+      software: software,
+      system_no: systemNo,
+      viewed: viewed,
+      not_viewed: notViewed,
+      ultra: ultra,
+      mobile: mobile,
+      issues: issues
+    });
+  });
+
+  const payload = {
+    date: date,
+    location: location,
+    region: currentRegion,
+    start_time: startTime,
+    end_time: endTime,
+    stores: stores
+  };
+
+  console.log("Submitting payload:", payload); // ✅ Useful for debugging
+
+  // ✉️ Now send it to your PHP backend
+  fetch('submit_data.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(response => response.text())
+  .then(data => {
+    alert("✅ Submission successful!");
+    console.log(data);
+  })
+  .catch(error => {
+    console.error('❌ Error submitting:', error);
+    alert("Error submitting data!");
+  });
+}
+function exportToExcel() {
+  const globalDate = new Date().toISOString().split('T')[0];
+  const location = document.getElementById("commonLocation").value;
+  const startTime = document.getElementById("commonStartTime").value;
+  const endTime = document.getElementById("commonEndTime").value;
+
+  const rows = document.querySelectorAll("#storeTable tbody tr");
+  const stores = [];
+
+  let viewedCount = 0;
+  let notViewedCount = 0;
+
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    if (cells.length < 8) return;
+
+    const storeName = cells[0].innerText.trim();
+    const software = cells[1].querySelector("select")?.value || "";
+    const systemNo = cells[2].querySelector("select")?.value || "";
+    const viewed = cells[3].querySelector("input")?.checked ? "viewed" : "";
+    const notViewed = cells[4].querySelector("input")?.checked ? "Not viewed" : "";
+    const ultra = cells[5].querySelector("input")?.checked ? "Ultraviewer" : "";
+    const mobile = cells[6].querySelector("input")?.checked ? "Mobile" : "";
+    const issues = cells[7].querySelector("textarea")?.value || "";
+
+    if (viewed || ultra || mobile) viewedCount++;
+    else if (notViewed) notViewedCount++;
+
+    stores.push({
+      Store: storeName,
+      Software: software,
+      "System No": systemNo,
+      Viewed: viewed,
+      "Not Viewed": notViewed,
+      UltraViewer: ultra,
+      Mobile: mobile,
+      Issues: issues,
+      "Start Time": startTime,
+      "End Time": endTime,
+      Location: location,
+      Region: currentRegion,
+      Date: globalDate
+    });
+  });
+
+  // Add summary row
+  stores.push({
+    Store: "TOTAL",
+    Viewed: viewedCount,
+    "Not Viewed": notViewedCount
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(stores);
+
+  // Apply yellow background to "Not Viewed" rows
+  stores.forEach((store, index) => {
+    if (store["Not Viewed"] === "Not viewed") {
+      const cellRange = XLSX.utils.encode_range({ s: { r: index + 1, c: 0 }, e: { r: index + 1, c: Object.keys(store).length - 1 } });
+      for (let C = 0; C < Object.keys(store).length; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: C });
+        if (!worksheet[cellAddress]) continue;
+        worksheet[cellAddress].s = {
+          fill: {
+            fgColor: { rgb: "FFFF00" } // Yellow
+          }
+        };
+      }
+    }
+  });
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "OTTO Store Data");
+
+  XLSX.writeFile(workbook, `OTTO_${currentRegion}_${globalDate}.xlsx`);
+}
+async function loadReport() {
+    const date = document.getElementById("reportDate").value;
+    const region = currentRegion; // Use the already selected region
+
+
+    if (!date || !region) {
+        alert("Select both date and region");
+        return;
+    }
+
+    const res = await fetch(`get_report.php?date=${date}&region=${region}`);
+    const data = await res.json();
+
+    if (data.status !== "success") {
+        alert("Failed to load report");
+        return;
+    }
+
+    const tableBody = document.querySelector("#storeTable tbody"); // ✅ selects the real tbody
+
+    tableBody.innerHTML = "";
+
+    data.stores.forEach(store => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${store.store_name}</td>
+            <td>${store.software}</td>
+            <td>${store.system_no}</td>
+            <td>${store.viewed}</td>
+            <td>${store.not_viewed}</td>
+            <td>${store.ultra}</td>
+            <td>${store.mobile}</td>
+            <td>${store.issues}</td>
+        `;
+
+        if (store.not_viewed === 'not viewed') {
+            tr.style.backgroundColor = "yellow";
+        }
+
+        tableBody.appendChild(tr);
+    });
+}
+
+
+
+
+function goBackToRegion() {
+  document.getElementById("storeBox").classList.add("hidden");
+  document.getElementById("regionBox").classList.remove("hidden");
+}
+async function populateRegionDropdown() {
+  const dropdown = document.getElementById("region");
+  dropdown.innerHTML = '<option value="">-- Select Region --</option>';
+
+  try {
+    const res = await fetch("get_stores.php");
+    const data = await res.json();
+
+    for (let region in data) {
+      const option = document.createElement("option");
+      option.value = region;
+      option.textContent = region;
+      dropdown.appendChild(option);
+    }
+  } catch (err) {
+    console.error("Failed to load regions:", err);
+    alert("Unable to fetch region list.");
+  }
+}
+
+window.onload = () => {
+  populateRegionDropdown(); // ⬅️ Call it on load
+};
+
+
+
+
+</script>
+
+</body>
+</html>
